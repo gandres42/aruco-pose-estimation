@@ -149,11 +149,9 @@ while True:
 		# print(img_points_np)
 
 		if len(real_points_np) >= 4:
-			# _, rVec, tVec = cv2.solvePnP(real_points_np, img_points_np, mtx, dist)
 			_, rVec, tVec = cv2.solvePnP(real_points_np, img_points_np, mtx, dist)
-			rVec, tVec = cv2.solvePnPRefineLM(real_points_np, img_points_np, mtx, dist, rVec, tVec)
+			rVec, tVec = cv2.solvePnPRefineVVS(real_points_np, img_points_np, mtx, dist, rVec, tVec)
 
-			print(rVec)
 			Rt = cv2.Rodrigues(rVec)[0]
 			R = Rt.transpose()
 			pos = -R * tVec
@@ -169,15 +167,10 @@ while True:
 			totalrotmax=np.array([[ ZYX[0,0], ZYX[0,1], ZYX[0,2], tVec[0][0] ], [ ZYX[1,0], ZYX[1,1], ZYX[1,2], tVec[1][0] ], [ ZYX[2,0], ZYX[2,1], ZYX[2,2], tVec[2][0] ], [0,0,0,1]])
 			WtoC=np.mat(totalrotmax)
 			inverserotmax=np.linalg.inv(totalrotmax)
-			f=inverserotmax
-			print(inverserotmax)
-
 
 			x = inverserotmax[0][3]
 			y = inverserotmax[1][3]
 			z = inverserotmax[2][3]
-
-			print("----------------------")
 
 			print("x: " + str(round(x, 3)))
 			print("y: " + str(round(y, 3)))
