@@ -8,12 +8,13 @@ References  :
     3) https://docs.opencv.org/3.1.0/d5/dae/tutorial_aruco_detection.html
 """
 
-from cv2 import SOLVEPNP_P3P
+from cv2 import SOLVEPNP_IPPE, SOLVEPNP_IPPE_SQUARE, SOLVEPNP_P3P
 import numpy as np
 import cv2
 import cv2.aruco as aruco
 import glob
 import math
+import os
 
 cap = cv2.VideoCapture('/dev/video0')
 
@@ -65,6 +66,12 @@ while True:
 	# to have a maximum width of 600 pixels
 	ret, frame = cap.read()
 
+	# h,  w = img.shape[:2]
+	# newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
+	# frame = cv2.undistort(img, mtx, dist, None, newcameramtx)
+	# x, y, w, h = roi
+	# frame = frame[y:y+h, x:x+w]
+
 	# detect ArUco markers in the input frame
 	(corners, ids, rejected) = cv2.aruco.detectMarkers(frame, arucoDict, parameters=arucoParams)
 
@@ -101,20 +108,30 @@ while True:
 			cX = int((topLeft[0] + bottomRight[0]) / 2.0)
 			cY = int((topLeft[1] + bottomRight[1]) / 2.0)
 
-			if markerID == 23:
-				real_points.append([0, 0, 0])
+			if markerID == 0:
+				# # center = -3.5, -2.5
+				# # tl
+				# real_points.append([-4.5, -1.5, 0])
+				# img_points.append([topLeft[0], topLeft[1]])
+				# # tr
+				# real_points.append([-2.5, -1.5, 0])
+				# img_points.append([topRight[0], topRight[1]])
+				# # bl
+				# real_points.append([-4.5, -3.5, 0])
+				# img_points.append([bottomLeft[0], bottomLeft[1]])
+				# # br
+				# real_points.append([-2.5, -3.5, 0])
+				# img_points.append([bottomRight[0], bottomRight[1]])
+				real_points.append([-3.5, -2.5, 0])
 				img_points.append([cX, cY])
-			elif markerID == 124:
-				real_points.append([2.59, 1.02, 0])
+			elif markerID == 1:
+				real_points.append([-3.5, 2.5, 0])
 				img_points.append([cX, cY])
-			elif markerID == 203:
-				real_points.append([-2.91, 1.12, 0])
+			elif markerID == 2:
+				real_points.append([3.5, -2.5, 0])
 				img_points.append([cX, cY])
-			elif markerID == 62:
-				real_points.append([-2.44, -2, 0])
-				img_points.append([cX, cY])
-			elif markerID == 98:
-				real_points.append([3.62, -2.62, 0])
+			elif markerID == 3:
+				real_points.append([3.5, 2.5, 0])
 				img_points.append([cX, cY])
 
 			cv2.circle(frame, (cX, cY), 4, (0, 0, 255), -1)
@@ -134,12 +151,42 @@ while True:
 		if len(real_points_np) >= 4:
 			# _, rVec, tVec = cv2.solvePnP(real_points_np, img_points_np, mtx, dist)
 			_, rVec, tVec = cv2.solvePnP(real_points_np, img_points_np, mtx, dist)
+			rVec, tVec = cv2.solvePnPRefineLM(real_points_np, img_points_np, mtx, dist, rVec, tVec)
+
+			print(rVec)
 			Rt = cv2.Rodrigues(rVec)[0]
-			# print(Rt)
-			# print(-cv2.transpose(rVec) * tVec)
-			R = cv2.transpose(Rt)
+			R = Rt.transpose()
 			pos = -R * tVec
-			print(cv2.transpose(tVec))
+
+			pitch = float(math.atan2(-R[2][1], R[2][2]))
+			yaw = math.asin(R[2][0])
+			roll = math.atan2(-R[1][0], R[0][0])
+
+			os.system('cls' if os.name == 'nt' else 'clear')
+
+			# courtesy of https://www.chiefdelphi.com/t/finding-camera-location-with-solvepnp/159685/6
+			ZYX,jac=cv2.Rodrigues(rVec)
+			totalrotmax=np.array([[ ZYX[0,0], ZYX[0,1], ZYX[0,2], tVec[0][0] ], [ ZYX[1,0], ZYX[1,1], ZYX[1,2], tVec[1][0] ], [ ZYX[2,0], ZYX[2,1], ZYX[2,2], tVec[2][0] ], [0,0,0,1]])
+			WtoC=np.mat(totalrotmax)
+			inverserotmax=np.linalg.inv(totalrotmax)
+			f=inverserotmax
+			print(inverserotmax)
+
+
+			x = inverserotmax[0][3]
+			y = inverserotmax[1][3]
+			z = inverserotmax[2][3]
+
+			print("----------------------")
+
+			print("x: " + str(round(x, 3)))
+			print("y: " + str(round(y, 3)))
+			print("z: " + str(round(z, 3)))
+			print("yaw: " + str(round(math.degrees(yaw), 3)))
+			print("pitch: " + str(round(math.degrees(pitch), 3)))
+			print("roll: " + str(round(math.degrees(roll), 3)))
+
+			# print(cv2.transpose(tVec))
 
 	# show the output frame
 	cv2.imshow("Frame", frame)
