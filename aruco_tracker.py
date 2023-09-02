@@ -137,9 +137,6 @@ while True:
         real_points_np = np.array(real_points, dtype=np.float32)
         img_points_np = np.array(img_points, dtype=np.float32)
 
-        print(real_points_np)
-        print(img_points_np)
-
         if len(real_points_np) >= 4:
             _, rVec, tVec = cv2.solvePnP(
                 real_points_np, img_points_np, mtx, dist)
@@ -158,8 +155,7 @@ while True:
 
             # courtesy of https://www.chiefdelphi.com/t/finding-camera-location-with-solvepnp/159685/6
             ZYX, jac = cv2.Rodrigues(rVec)
-            totalrotmax = np.array([[ZYX[0, 0], ZYX[0, 1], ZYX[0, 2], tVec[0][0]], [
-                                   ZYX[1, 0], ZYX[1, 1], ZYX[1, 2], tVec[1][0]], [ZYX[2, 0], ZYX[2, 1], ZYX[2, 2], tVec[2][0]], [0, 0, 0, 1]])
+            totalrotmax = np.array([[ZYX[0, 0], ZYX[0, 1], ZYX[0, 2], tVec[0][0]], [ZYX[1, 0], ZYX[1, 1], ZYX[1, 2], tVec[1][0]], [ZYX[2, 0], ZYX[2, 1], ZYX[2, 2], tVec[2][0]], [0, 0, 0, 1]])
             WtoC = np.mat(totalrotmax)
             inverserotmax = np.linalg.inv(totalrotmax)
 
@@ -174,8 +170,6 @@ while True:
             print("pitch: " + str(round(math.degrees(pitch), 3)))
             print("roll: " + str(round(math.degrees(roll), 3)))
 
-            # print(cv2.transpose(tVec))
-
     # show the output frame
     cv2.imshow("Frame", frame)
     key = cv2.waitKey(1) & 0xFF
@@ -183,68 +177,3 @@ while True:
     # if the `q` key was pressed, break from the loop
     if key == ord("q"):
         break
-
-
-# ------------------ ARUCO ROTATION --------------------------
-# while (True):
-# 	ret, frame = cap.read()
-# 	# if ret returns false, there is likely a problem with the webcam/camera.
-# 	# In that case uncomment the below line, which will replace the empty frame
-# 	# with a test image used in the opencv docs for aruco at https://www.docs.opencv.org/4.5.3/singlemarkersoriginal.jpg
-# 	# frame = cv2.imread('./images/test image.jpg')
-
-# 	# operations on the frame
-# 	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-# 	# set dictionary size depending on the aruco marker selected
-# 	aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
-
-# 	# detector parameters can be set here (List of detection parameters[3])
-# 	parameters = aruco.DetectorParameters_create()
-# 	parameters.adaptiveThreshConstant = 10
-
-# 	# lists of ids and the corners belonging to each id
-# 	corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-
-# 	# font for displaying text (below)
-# 	font = cv2.FONT_HERSHEY_SIMPLEX
-
-# 	# check if the ids list is not empty
-# 	# if no check is added the code will crash
-# 	if np.all(ids != None):
-
-# 		# estimate pose of each marker and return the values
-# 		# rvet and tvec-different from camera coefficients
-# 		rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners, 1, mtx, dist)
-
-# 		# (rvec-tvec).any() # get rid of that nasty numpy value array error
-# 		print("--------------------------------")
-# 		for i in range(0, ids.size):
-# 			print(ids[i][0], end="")
-# 			print(tvec[i])
-# 			# draw axis for the aruco markers
-# 			cv2.drawFrameAxes(frame, mtx, dist, rvec[i], tvec[i], 0.1)
-
-# 		# draw a square around the markers
-# 		aruco.drawDetectedMarkers(frame, corners)
-
-# 		# code to show ids of the marker found
-# 		strg = ''
-# 		ids.sort()
-# 		for i in range(0, ids.size):
-# 			strg += str(ids[i][0])+', '
-
-# 		cv2.putText(frame, "Id: " + strg, (0, 64), font, 1, (0,255,0),2,cv2.LINE_AA)
-
-# 	else:
-# 		# code to show 'No Ids' when no markers are found
-# 		cv2.putText(frame, "No Ids", (0, 64), font, 1, (0,255,0),2,cv2.LINE_AA)
-
-# 	# display the resulting frame
-# 	cv2.imshow('frame', frame)
-# 	if cv2.waitKey(1) & 0xFF == ord('q'):
-# 		break
-
-# # When everything done, release the capture
-# cap.release()
-# cv2.destroyAllWindows()
