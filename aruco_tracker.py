@@ -1,4 +1,4 @@
-from cv2 import SOLVEPNP_IPPE, SOLVEPNP_IPPE_SQUARE, SOLVEPNP_P3P
+from cv2 import SOLVEPNP_IPPE, SOLVEPNP_IPPE_SQUARE, SOLVEPNP_P3P, CAP_PROP_FPS
 import numpy as np
 import cv2
 import cv2.aruco as aruco
@@ -7,6 +7,7 @@ import math
 import os
 
 cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_FPS, 30)
 
 # ---------------------- CALIBRATION ---------------------------
 # termination criteria for the iterative algorithm
