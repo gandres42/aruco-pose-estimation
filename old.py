@@ -24,8 +24,8 @@ imgpoints = []  # 2d points in image plane.
 
 # iterating through all calibration images
 # in the folder
-images = glob.glob('my_images/*.jpg')
-
+images = glob.glob('cailbration_images/*.jpg')
+gray = np.array([])
 for fname in images:
     img = cv2.imread(fname)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -39,15 +39,13 @@ for fname in images:
         objpoints.append(objp)
 
         # Refine the corners of the detected corners
-        corners2 = cv2.cornerSubPix(
-            gray, corners, (11, 11), (-1, -1), criteria)
+        corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
         imgpoints.append(corners2)
 
         # Draw and display the corners
         img = cv2.drawChessboardCorners(img, (8, 6), corners2, ret)
 
-ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
-    objpoints, imgpoints, gray.shape[::-1], None, None)
+ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
 
 # ------------------ ARUCO PNP  ----------------------------
 arucoDict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
@@ -139,10 +137,8 @@ while True:
         img_points_np = np.array(img_points, dtype=np.float32)
 
         if len(real_points_np) >= 4:
-            _, rVec, tVec = cv2.solvePnP(
-                real_points_np, img_points_np, mtx, dist)
-            rVec, tVec = cv2.solvePnPRefineVVS(
-                real_points_np, img_points_np, mtx, dist, rVec, tVec)
+            _, rVec, tVec = cv2.solvePnP(real_points_np, img_points_np, mtx, dist)
+            rVec, tVec = cv2.solvePnPRefineVVS(real_points_np, img_points_np, mtx, dist, rVec, tVec)
 
             Rt = cv2.Rodrigues(rVec)[0]
             R = Rt.transpose()
