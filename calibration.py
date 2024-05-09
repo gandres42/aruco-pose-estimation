@@ -24,7 +24,6 @@ def calibrate_pinhole(dirpath, prefix, image_format, square_size, width=6, heigh
     images = glob.glob(dirpath+'/' + prefix + '*.' + image_format)
 
     for fname in images:
-        print(fname)
         img = cv2.imread(fname)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 

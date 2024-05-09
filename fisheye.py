@@ -3,6 +3,7 @@ import numpy as np
 import glob
 import os
 import math
+from calibration import calibrate_fisheye
 
 
 K, D, mtx = calibrate_fisheye('./fisheye_images/*')
@@ -10,7 +11,7 @@ K, D, mtx = calibrate_fisheye('./fisheye_images/*')
 cap = cv.VideoCapture('/dev/video0')
 cap.set(cv.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
-cap.set(cv.CAP_PROP_FPS, 30)
+cap.set(cv.CAP_PROP_FPS, 60)
 
 detector = cv.aruco.ArucoDetector(
     cv.aruco.getPredefinedDictionary(cv.aruco.DICT_4X4_50),
@@ -30,18 +31,14 @@ while True:
     
     corners = np.array(corners[0])
 
-    undistorted = cv.fisheye.undistortPoints(corners, K, D).astype(np.float32)
+    undistorted = cv.fisheye.undistortPoints(corners, K, D, None, mtx).astype(np.float32)
     obj_points = np.array([[
         [0, 0, 0],
-        [.183, 0, 0],
-        [.183, -.183, 0],
-        [0, -.183, 0]
+        [180, 0, 0],
+        [180, 180, 0],
+        [0, 180, 0]
     ]], dtype=np.float32)
-    _, rvec, tvec = cv.solvePnP(obj_points, undistorted, np.eye(3), np.zeros((5,1)))
-    
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print(tvec)
-    print(rvec)
+    _, rvec, tvec = cv.solvePnP(obj_points, undistorted, np.eye(3), np.zeros((4,1)))
 
     Rt = cv.Rodrigues(rvec)[0]
     R = Rt.transpose()
@@ -51,7 +48,6 @@ while True:
     yaw = math.asin(R[2][0])
     roll = math.atan2(-R[1][0], R[0][0])
 
-    # courtesy of https://www.chiefdelphi.com/t/finding-camera-location-with-solvepnp/159685/6
     ZYX, jac = cv.Rodrigues(rvec)
     totalrotmax = np.array([[ZYX[0, 0], ZYX[0, 1], ZYX[0, 2], tvec[0][0]], [ZYX[1, 0], ZYX[1, 1], ZYX[1, 2], tvec[1][0]], [ZYX[2, 0], ZYX[2, 1], ZYX[2, 2], tvec[2][0]], [0, 0, 0, 1]])
     WtoC = np.mat(totalrotmax)
