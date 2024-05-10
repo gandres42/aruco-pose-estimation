@@ -26,7 +26,6 @@ class Transformer(Node):
         self.publisher_ = self.create_publisher(PoseStamped, '/adjusted_pose', 10)
         self.init_position = None
         self.init_orientation = None
-        print("delivered")
 
     def listener_callback(self, msg):
         position = (np.array([
@@ -81,61 +80,64 @@ class ArucoEstimator():
             Thread(target=self.camera_thead, args=(serial, camera)).start()
     
     def camera_thead(self, serial: str, camera: str):
-        cap = cv2.VideoCapture(camera)
-        
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        cap.set(cv2.CAP_PROP_FPS, 60)
-
-        detector = cv2.aruco.ArucoDetector(
-            cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50),
-            cv2.aruco.DetectorParameters()
-        )
-
-        mtx = calibations[serial]['mtx']
-        dist = calibations[serial]['dist']
-
-        while self.init_position is None:
-            _, frame = cap.read()
+        try:
+            cap = cv2.VideoCapture(camera)
             
-            corners, ids, rejected = detector.detectMarkers(frame)
-            if corners == ():
-                continue
-            flat_corners = ids.flatten().tolist()
-            if flat_corners != [0, 1] and flat_corners != [1, 0] and flat_corners != [0]:
-                continue
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_FPS, 60)
 
-            img_points = []
-            real_points = []
+            detector = cv2.aruco.ArucoDetector(
+                cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50),
+                cv2.aruco.DetectorParameters()
+            )
 
-            for i in range(0, len(ids)):
-                for i in range(0, 4):
-                    img_points.append(corners[0][0][i])
-                    real_points.append(aruco_positions[0][0][i])
+            mtx = calibations[serial]['mtx']
+            dist = calibations[serial]['dist']
 
-            real_points = np.array(real_points).astype(np.float32)
-            img_points = np.array(img_points).astype(np.float32)
+            while self.init_position is None:
+                _, frame = cap.read()
+                
+                corners, ids, rejected = detector.detectMarkers(frame)
+                if corners == ():
+                    continue
+                flat_corners = ids.flatten().tolist()
+                if flat_corners != [0, 1] and flat_corners != [1, 0] and flat_corners != [0]:
+                    continue
 
-            _, rvec, tvec = cv2.solvePnP(real_points, img_points, mtx, dist)
+                img_points = []
+                real_points = []
 
-            Rt = cv2.Rodrigues(rvec)[0]
-            R = Rt.transpose()
-            pos = -R * tvec #type: ignore
+                for i in range(0, len(ids)):
+                    for i in range(0, 4):
+                        img_points.append(corners[0][0][i])
+                        real_points.append(aruco_positions[0][0][i])
 
-            ZYX, jac = cv2.Rodrigues(rvec)
-            totalrotmax = np.array([[ZYX[0, 0], ZYX[0, 1], ZYX[0, 2], tvec[0][0]], [ZYX[1, 0], ZYX[1, 1], ZYX[1, 2], tvec[1][0]], [ZYX[2, 0], ZYX[2, 1], ZYX[2, 2], tvec[2][0]], [0, 0, 0, 1]])
-            inverserotmax = np.linalg.inv(totalrotmax)
+                real_points = np.array(real_points).astype(np.float32)
+                img_points = np.array(img_points).astype(np.float32)
 
-            pitch = float(math.atan2(-R[2][1], R[2][2]))
-            yaw = math.asin(R[2][0])
-            roll = math.atan2(-R[1][0], R[0][0])
-            x = inverserotmax[0][3]
-            y = inverserotmax[1][3]
-            z = inverserotmax[2][3]
-            cap.release()
+                _, rvec, tvec = cv2.solvePnP(real_points, img_points, mtx, dist)
 
-            self.init_position = np.array([x, y, z])
-            self.init_orientation = Rot.from_euler('xyz', (roll, pitch, yaw), degrees=True).as_matrix() # type: ignore
+                Rt = cv2.Rodrigues(rvec)[0]
+                R = Rt.transpose()
+                pos = -R * tvec #type: ignore
+
+                ZYX, jac = cv2.Rodrigues(rvec)
+                totalrotmax = np.array([[ZYX[0, 0], ZYX[0, 1], ZYX[0, 2], tvec[0][0]], [ZYX[1, 0], ZYX[1, 1], ZYX[1, 2], tvec[1][0]], [ZYX[2, 0], ZYX[2, 1], ZYX[2, 2], tvec[2][0]], [0, 0, 0, 1]])
+                inverserotmax = np.linalg.inv(totalrotmax)
+
+                pitch = float(math.atan2(-R[2][1], R[2][2]))
+                yaw = math.asin(R[2][0])
+                roll = math.atan2(-R[1][0], R[0][0])
+                x = inverserotmax[0][3]
+                y = inverserotmax[1][3]
+                z = inverserotmax[2][3]
+                cap.release()
+
+                self.init_position = np.array([x, y, z])
+                self.init_orientation = Rot.from_euler('xyz', (roll, pitch, yaw), degrees=True).as_matrix() # type: ignore
+        except Exception as e:
+            print(camera + " thread exception: " + str(e))
 
     def sined(self) -> bool:
         return self.init_orientation is not None
@@ -143,19 +145,30 @@ class ArucoEstimator():
     def get_init(self):
         return self.init_position, self.init_orientation
 
+    def kill(self):
+        self.init_position = 'die'
+
+
 # SINED: get initial pose using aruco
 est = ArucoEstimator()
-while not est.sined():
-    time.sleep(.1)
-cv2.destroyAllWindows()
+try:
+    while not est.sined():
+        time.sleep(.1)
+except KeyboardInterrupt:
+    est.kill()
+    exit()
 position, orientation = est.get_init()
+print('SINED')
 
 # SEELED: start DLIO
 #  TODO
+print('SEELED')
 
 # DELIVERED: start pose transformation node
 rclpy.init()
 minimal_subscriber = Transformer(position, orientation)
 rclpy.spin(minimal_subscriber)
+print('DELIVERED')
+
 minimal_subscriber.destroy_node()
 rclpy.shutdown()
