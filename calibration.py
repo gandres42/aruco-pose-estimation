@@ -2,10 +2,10 @@ import numpy as np
 import cv2
 import glob
 import argparse
+import sys
 
 # termination criteria
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-
 
 def calibrate_pinhole(dirpath, prefix, image_format, square_size, width=6, height=9):
     """ Apply camera calibration operation for images in the given directory path. """
@@ -41,8 +41,11 @@ def calibrate_pinhole(dirpath, prefix, image_format, square_size, width=6, heigh
             img = cv2.drawChessboardCorners(img, (width, height), corners2, ret)
 
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
-
-    return [ret, mtx, dist, rvecs, tvecs]
+    print('mtx')
+    print(mtx)
+    print('dist')
+    print(dist)
+    # return [ret, mtx, dist, rvecs, tvecs]
 
 def calibrate_fisheye(img_folder_path):
     CHECKERBOARD = (6,9)
@@ -90,3 +93,6 @@ def calibrate_fisheye(img_folder_path):
     mtx = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(K, D, dim, np.eye(3), K)
 
     return K, D, mtx
+
+print(sys.argv)
+calibrate_pinhole('./pinhole_images', '*', 'jpg', 25)
