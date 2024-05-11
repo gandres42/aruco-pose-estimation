@@ -10,7 +10,7 @@ import re
 from constants import aruco_positions, calibations
 from threading import Thread
 import time
-
+import subprocess
 
 class Transformer(Node):
     def __init__(self, init_position, init_orientation):
@@ -24,8 +24,6 @@ class Transformer(Node):
             10
         )
         self.publisher_ = self.create_publisher(PoseStamped, '/adjusted_pose', 10)
-        self.init_position = None
-        self.init_orientation = None
 
     def listener_callback(self, msg):
         position = (np.array([
@@ -40,7 +38,7 @@ class Transformer(Node):
                 msg.pose.orientation.z,
                 msg.pose.orientation.w
             ]).as_matrix() @ self.init_orientation
-        ).as_quat()
+        ).as_quat() # type: ignore
 
         new_msg = PoseStamped()
 
@@ -137,7 +135,7 @@ class ArucoEstimator():
                 self.init_position = np.array([x, y, z])
                 self.init_orientation = Rot.from_euler('xyz', (roll, pitch, yaw), degrees=True).as_matrix() # type: ignore
         except Exception as e:
-            print(camera + " thread exception: " + str(e))
+            print(camera + " thread exception: " + str(e), end="")
 
     def sined(self) -> bool:
         return self.init_orientation is not None
@@ -161,14 +159,32 @@ position, orientation = est.get_init()
 print('SINED')
 
 # SEELED: start DLIO
-#  TODO
-print('SEELED')
+try:
+    cloud_filter = subprocess.Popen(
+        'python /home/gavin/CSM/localization_ws/cloud.py',
+        shell=True,
+        executable="/bin/bash"
+    )
+    imu_filter = subprocess.Popen(
+        'python /home/gavin/CSM/localization_ws/imu.py',
+        shell=True,
+        executable="/bin/bash"
+    )
+    dlio = subprocess.Popen(
+        'source /home/gavin/CSM/csmdlio_ws/install/setup.bash && ros2 launch direct_lidar_inertial_odometry dlio.launch.py rviz:=false pointcloud_topic:=/filtered_cloud imu_topic:=/filtered_imu',
+        shell=True,
+        executable="/bin/bash"
+    )
+    print('SEELED')
 
-# DELIVERED: start pose transformation node
-rclpy.init()
-minimal_subscriber = Transformer(position, orientation)
-rclpy.spin(minimal_subscriber)
-print('DELIVERED')
-
-minimal_subscriber.destroy_node()
-rclpy.shutdown()
+    # DELIVERED: start pose transformation node
+    rclpy.init()
+    minimal_subscriber = Transformer(position, orientation)
+    rclpy.spin(minimal_subscriber)
+    print('DELIVERED')
+    minimal_subscriber.destroy_node()
+    rclpy.shutdown()
+except:
+    subprocess.run(['kill', '-9 ', str(dlio.pid)])
+    subprocess.run(['kill', '-9 ', str(cloud_filter.pid)])
+    subprocess.run(['kill', '-9 ', str(imu_filter.pid)])
