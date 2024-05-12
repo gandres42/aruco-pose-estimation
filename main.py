@@ -177,7 +177,7 @@ try:
     )
     print('SEELED')
 
-    # DELIVERED: start pose transformation node
+# DELIVERED: start pose transformation node
     rclpy.init()
     minimal_subscriber = Transformer(position, orientation)
     rclpy.spin(minimal_subscriber)
