@@ -1,16 +1,14 @@
 import cv2
 import numpy as np
-import math
 from scipy.spatial.transform import Rotation as Rot
-import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
-import subprocess
-import re
-from constants import aruco_positions, calibations
-from threading import Thread
-import time
-import subprocess
+from constants import aruco_positions, mtx, dist
+import math
+import rclpy
+
+INVERSE_LOCALIZATION = False
+DISPLAY = True
 
 class Transformer(Node):
     def __init__(self, init_position, init_orientation):
@@ -56,135 +54,109 @@ class Transformer(Node):
 
         self.publisher_.publish(new_msg)
 
-class ArucoEstimator():
-    def get_camera_info(self):
-        endpoints = subprocess.run(("ls", "/dev"), capture_output=True).stdout.decode().split('\n')
-        cameras = [f"/dev/{x}" for x in endpoints if re.compile('video\d+').match(x)]
-        cams = []
-        for camera in cameras:
-            lines = subprocess.run(("v4l2-ctl", "-d", camera, "--info"), capture_output=True).stdout.decode().splitlines()
-            for line in lines:
-                if 'Serial' in line:
-                    _, serial = line.replace('\t', '').replace(' ', '').split(':')
-                    cams.append((serial, camera))
-                    break
-        return tuple(cams)    
-    
+class Localization(Node):
     def __init__(self):
-        self.init_orientation = None
-        self.init_position = None
+        super().__init__('overthruster') # type: ignore
+        self.publisher_ = self.create_publisher(PoseStamped, '/camera_pose', 10)
 
-        for serial, camera in self.get_camera_info():
-            Thread(target=self.camera_thead, args=(serial, camera)).start()
+    def publish(self, Rt, position):
+        new_msg = PoseStamped()
+        new_msg.header.stamp = self.get_clock().now().to_msg()
+
+        orientation = Rot.from_matrix(Rt).as_quat()
+        new_msg.pose.orientation.x = orientation[0]
+        new_msg.pose.orientation.y = orientation[1]
+        new_msg.pose.orientation.z = orientation[2]
+        new_msg.pose.orientation.w = orientation[3]
+        
+        new_msg.pose.position.x = position[0]
+        new_msg.pose.position.y = position[1]
+        new_msg.pose.position.z = position[2]
+
+        self.publisher_.publish(new_msg)
+
+
+rclpy.init()
+
+node = Localization()
+
+cap = cv2.VideoCapture('/dev/video6')
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+cap.set(cv2.CAP_PROP_FPS, 30)
+
+detector = cv2.aruco.ArucoDetector(
+    cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50),
+    cv2.aruco.DetectorParameters()
+)
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("Error: Could not read frame.")
+        break
     
-    def camera_thead(self, serial: str, camera: str):
-        try:
-            cap = cv2.VideoCapture(camera)
+    # get corners and display if enabled
+    corners, ids, _ = detector.detectMarkers(frame)
+    if ids is not None: cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+    
+    
+    # flatten corners into usable format, skip if none detected
+    if corners != ():
+        flat_corners = ids.flatten().tolist()
+        if not (flat_corners != [0, 1] and flat_corners != [1, 0] and flat_corners != [0]):
+            # construct real and camera point comparison matricies
+            img_points = []
+            real_points = []
+            for i in range(0, len(ids)):
+                for i in range(0, 4):
+                    img_points.append(corners[0][0][i])
+                    real_points.append(aruco_positions[0][0][i])
+            real_points = np.array(real_points).astype(np.float32)
+            img_points = np.array(img_points).astype(np.float32)
+
+            # solve PnP
+            _, rvec, tvec = cv2.solvePnP(real_points, img_points, mtx, dist)
+
+            # transform into world frame
+            rot = cv2.Rodrigues(rvec)[0]
             
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            cap.set(cv2.CAP_PROP_FPS, 60)
-
-            detector = cv2.aruco.ArucoDetector(
-                cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50),
-                cv2.aruco.DetectorParameters()
-            )
-
-            mtx = calibations[serial]['mtx']
-            dist = calibations[serial]['dist']
-
-            while self.init_position is None:
-                _, frame = cap.read()
-                
-                corners, ids, rejected = detector.detectMarkers(frame)
-                if corners == ():
-                    continue
-                flat_corners = ids.flatten().tolist()
-                if flat_corners != [0, 1] and flat_corners != [1, 0] and flat_corners != [0]:
-                    continue
-
-                img_points = []
-                real_points = []
-
-                for i in range(0, len(ids)):
-                    for i in range(0, 4):
-                        img_points.append(corners[0][0][i])
-                        real_points.append(aruco_positions[0][0][i])
-
-                real_points = np.array(real_points).astype(np.float32)
-                img_points = np.array(img_points).astype(np.float32)
-
-                _, rvec, tvec = cv2.solvePnP(real_points, img_points, mtx, dist)
-
-                Rt = cv2.Rodrigues(rvec)[0]
-                R = Rt.transpose()
-                pos = -R * tvec #type: ignore
-
+            # inverse to camera localization is specified
+            if INVERSE_LOCALIZATION:
+                R = rot.transpose()
+                pos = -R * tvec
                 ZYX, jac = cv2.Rodrigues(rvec)
                 totalrotmax = np.array([[ZYX[0, 0], ZYX[0, 1], ZYX[0, 2], tvec[0][0]], [ZYX[1, 0], ZYX[1, 1], ZYX[1, 2], tvec[1][0]], [ZYX[2, 0], ZYX[2, 1], ZYX[2, 2], tvec[2][0]], [0, 0, 0, 1]])
-                inverserotmax = np.linalg.inv(totalrotmax)
+                rot = np.linalg.inv(totalrotmax)
+                
+            if DISPLAY:
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = .5
+                color = (255, 255, 255)  # White color for text
+                thickness = 1
+                position = (10, frame.shape[0] - 10)
+                ypr = Rot.from_matrix(rot).as_euler('xyz', degrees=True)
+                yaw = ypr[1]
+                pitch = ypr[0]
+                roll = ypr[2]
+                x = tvec[0, 0]
+                y = tvec[1, 0]
+                z = tvec[2, 0]
+                cv2.putText(frame, f"x: {x:.2f}", (0, frame.shape[0] - 20), font, font_scale, color, thickness, cv2.LINE_AA)
+                cv2.putText(frame, f"y: {y:.2f}", (120, frame.shape[0] - 20), font, font_scale, color, thickness, cv2.LINE_AA)
+                cv2.putText(frame, f"z: {z:.2f}", (240, frame.shape[0] - 20), font, font_scale, color, thickness, cv2.LINE_AA)
+                cv2.putText(frame, f"yaw: {yaw:.2f}", (0, frame.shape[0] - 5), font, font_scale, color, thickness, cv2.LINE_AA)
+                cv2.putText(frame, f"pitch: {pitch:.2f}", (120, frame.shape[0] - 5), font, font_scale, color, thickness, cv2.LINE_AA)
+                cv2.putText(frame, f"roll: {roll:.2f}", (240, frame.shape[0] - 5), font, font_scale, color, thickness, cv2.LINE_AA)
+            
+            node.publish(rot, tvec.flatten())
 
-                pitch = float(math.atan2(-R[2][1], R[2][2]))
-                yaw = math.asin(R[2][0])
-                roll = math.atan2(-R[1][0], R[0][0])
-                x = inverserotmax[0][3]
-                y = inverserotmax[1][3]
-                z = inverserotmax[2][3]
-                cap.release()
+    cv2.imshow('Camera', frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+        
 
-                self.init_position = np.array([x, y, z])
-                self.init_orientation = Rot.from_euler('xyz', (roll, pitch, yaw), degrees=True).as_matrix() # type: ignore
-        except Exception as e:
-            print(camera + " thread exception: " + str(e), end="")
+# Start pose transformation node
+# rclpy.init()
 
-    def sined(self) -> bool:
-        return self.init_orientation is not None
-    
-    def get_init(self):
-        return self.init_position, self.init_orientation
-
-    def kill(self):
-        self.init_position = 'die'
-
-
-# SINED: get initial pose using aruco
-est = ArucoEstimator()
-try:
-    while not est.sined():
-        time.sleep(.1)
-except KeyboardInterrupt:
-    est.kill()
-    exit()
-position, orientation = est.get_init()
-print('SINED')
-
-# SEELED: start DLIO
-try:
-    cloud_filter = subprocess.Popen(
-        'python /home/gavin/CSM/localization_ws/cloud.py',
-        shell=True,
-        executable="/bin/bash"
-    )
-    imu_filter = subprocess.Popen(
-        'python /home/gavin/CSM/localization_ws/imu.py',
-        shell=True,
-        executable="/bin/bash"
-    )
-    dlio = subprocess.Popen(
-        'source /home/gavin/CSM/csmdlio_ws/install/setup.bash && ros2 launch direct_lidar_inertial_odometry dlio.launch.py rviz:=false pointcloud_topic:=/filtered_cloud imu_topic:=/filtered_imu',
-        shell=True,
-        executable="/bin/bash"
-    )
-    print('SEELED')
-
-# DELIVERED: start pose transformation node
-    rclpy.init()
-    minimal_subscriber = Transformer(position, orientation)
-    rclpy.spin(minimal_subscriber)
-    print('DELIVERED')
-    minimal_subscriber.destroy_node()
-    rclpy.shutdown()
-except:
-    subprocess.run(['kill', '-9 ', str(dlio.pid)])
-    subprocess.run(['kill', '-9 ', str(cloud_filter.pid)])
-    subprocess.run(['kill', '-9 ', str(imu_filter.pid)])
+rclpy.shutdown()
