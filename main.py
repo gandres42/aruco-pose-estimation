@@ -60,20 +60,21 @@ class Localization(Node):
         self.publisher_ = self.create_publisher(PoseStamped, '/camera_pose', 10)
 
     def publish(self, Rt, position):
-        new_msg = PoseStamped()
-        new_msg.header.stamp = self.get_clock().now().to_msg()
+        msg = PoseStamped()
+        msg.header.frame_id = 'world'
+        msg.header.stamp = self.get_clock().now().to_msg()
 
         orientation = Rot.from_matrix(Rt).as_quat()
-        new_msg.pose.orientation.x = orientation[0]
-        new_msg.pose.orientation.y = orientation[1]
-        new_msg.pose.orientation.z = orientation[2]
-        new_msg.pose.orientation.w = orientation[3]
+        msg.pose.orientation.x = orientation[0]
+        msg.pose.orientation.y = orientation[1]
+        msg.pose.orientation.z = orientation[2]
+        msg.pose.orientation.w = orientation[3]
         
-        new_msg.pose.position.x = position[0]
-        new_msg.pose.position.y = position[1]
-        new_msg.pose.position.z = position[2]
+        msg.pose.position.x = position[2] / 10
+        msg.pose.position.y = position[0] / -10
+        msg.pose.position.z = position[1] / 10
 
-        self.publisher_.publish(new_msg)
+        self.publisher_.publish(msg)
 
 
 rclpy.init()
