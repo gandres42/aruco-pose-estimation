@@ -1,18 +1,21 @@
 import cv2
 import numpy as np
+import pyrealsense as pyrs
+from pyrealsense.constants import rs_option # type: ignore
 
 cv2.namedWindow("preview")
-vc = cv2.VideoCapture('/dev/video6')
 
-if vc.isOpened(): # try to get the first frame
-    rval, frame = vc.read()
-else:
-    rval = False
+serv = pyrs.Service()
+custom_options = [(rs_option.RS_OPTION_COLOR_EXPOSURE, 156), (rs_option.RS_OPTION_COLOR_ENABLE_AUTO_EXPOSURE, 0)]
+cam = serv.Device(device_id = 0, streams = [pyrs.stream.ColorStream(fps = 60), ]) # type: ignore
+cam.set_device_options(*zip(*custom_options))
 
-while rval:
-    rval, frame = vc.read()
+while True:
+    cam.wait_for_frames()
+    frame = cam.color
+    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     noir_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(noir_frame, 50, 255, cv2.THRESH_BINARY)
+    ret, thresh = cv2.threshold(noir_frame, 60, 255, cv2.THRESH_BINARY)
     # hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
     # #set the lower and upper bounds for the green hue
@@ -30,4 +33,3 @@ while rval:
         break
 
 cv2.destroyWindow("preview")
-vc.release()
