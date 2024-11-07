@@ -4,8 +4,8 @@ from scipy.spatial.transform import Rotation as Rot
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from constants import aruco_positions, mtx, dist
-import math
 import rclpy
+import pyrealsense as pyrs
 
 INVERSE_LOCALIZATION = False
 DISPLAY = True
@@ -81,24 +81,32 @@ rclpy.init()
 
 node = Localization()
 
-cap = cv2.VideoCapture('/dev/video4')
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-cap.set(cv2.CAP_PROP_FPS, 30)
-cap.set(cv2.CAP_PROP_MODE, 5)
+
+
+# cap = cv2.VideoCapture('/dev/video4')
+# cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+# cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+# cap.set(cv2.CAP_PROP_FPS, 30)
+# cap.set(cv2.CAP_PROP_MODE, 5)
+
 
 detector = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50),
     cv2.aruco.DetectorParameters()
 )
+serv = pyrs.Service()
+cam = serv.Device(device_id = 0, streams = [pyrs.stream.ColorStream(fps = 60)])
 
 while True:
-    ret, frame = cap.read()
-    if not ret:
-        print("Error: Could not read frame.")
-        break
+    # ret, frame = cap.read()
+    # if not ret:
+    #     print("Error: Could not read frame.")
+    #     break
     # noir_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     # ret, frame = cv2.threshold(frame, 50, 255, cv2.THRESH_BINARY)
+    cam.wait_for_frames()
+    frame = cam.color
+    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     
     # get corners and display if enabled
     corners, ids, _ = detector.detectMarkers(frame)
