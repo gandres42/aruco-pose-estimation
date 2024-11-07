@@ -81,10 +81,11 @@ rclpy.init()
 
 node = Localization()
 
-cap = cv2.VideoCapture('/dev/video6')
+cap = cv2.VideoCapture('/dev/video4')
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 cap.set(cv2.CAP_PROP_FPS, 30)
+cap.set(cv2.CAP_PROP_MODE, 5)
 
 detector = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50),
@@ -96,6 +97,8 @@ while True:
     if not ret:
         print("Error: Could not read frame.")
         break
+    # noir_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # ret, frame = cv2.threshold(frame, 50, 255, cv2.THRESH_BINARY)
     
     # get corners and display if enabled
     corners, ids, _ = detector.detectMarkers(frame)
