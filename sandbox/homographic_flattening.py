@@ -12,6 +12,15 @@ from scipy.linalg import logm, expm
 INVERSE_LOCALIZATION = False
 DISPLAY = True
 
+def average_homographies(homographies):
+    # Step 1: Convert each homography to logarithmic space
+    log_homographies = [logm(H) for H in homographies]
+    # Step 2: Compute the average in log space
+    avg_log_homography = sum(log_homographies) / len(log_homographies)
+    # Step 3: Convert back to Cartesian space
+    avg_homography = expm(avg_log_homography)
+    return avg_homography
+
 class Grid(Node):
     def __init__(self):
         super().__init__('grid') # type: ignore

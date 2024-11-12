@@ -46,10 +46,11 @@ cam = serv.Device(device_id = 0, streams = [pyrs.stream.ColorStream(fps = 60), p
 while True:
     cam.wait_for_frames()
     frame = cam.color
-    depth = cam.depth
-    # d = convert_z16_to_bgr(d)
-    print(depth)
-    
+    depth = cam.depth.astype(np.float32)
+
+    points = np.nonzero(depth)
+    for i in range(len(points[0])):
+        cv2.circle(frame, (points[1][i], points[0][i]), radius=1, color=(0, 255, 0), thickness=-1)
     cv2.imshow('Camera', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
