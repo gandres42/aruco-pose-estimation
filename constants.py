@@ -1,13 +1,11 @@
 import numpy as np
 
-aruco_positions = [
-    np.array([[
-        [-5, 5, 0],
-        [5, 5, 0],
-        [5, -5, 0],
-        [-5, -5, 0]
-    ]])
-]
+aruco_position = np.array([
+    [-5, 5, 0],
+    [5, 5, 0],
+    [5, -5, 0],
+    [-5, -5, 0]
+])
 
 mtx = np.array([
     [915.25367912, 0.           , 663.44366295 ],
