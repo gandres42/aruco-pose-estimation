@@ -75,7 +75,7 @@ class ArucoEstimator(Node):
             [0, 0, 1, 0, 0, 0]
         ])
         self.f.P *= 10.0
-        self.f.R = 10.0
+        # self.f.R = 10.0
 
         self.prev_f_time = self.get_clock().now().nanoseconds
 
