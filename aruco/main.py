@@ -74,8 +74,7 @@ class ArucoEstimator(Node):
             [0, 1, 0, 0, 0, 0],
             [0, 0, 1, 0, 0, 0]
         ])
-        self.f.P *= 10.0
-        # self.f.R = 10.0
+        self.f.P *= 5.0
 
         self.prev_f_time = self.get_clock().now().nanoseconds
 
@@ -164,7 +163,6 @@ class ArucoEstimator(Node):
         self.f.Q = self.make_Q(dt, 0.5)
         self.f.predict()
         self.f.update(tvec_ros)
-        print(self.f.x)
         self.prev_f_time = self.get_clock().now().nanoseconds
 
         # publish pose
