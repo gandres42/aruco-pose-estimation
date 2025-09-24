@@ -1,8 +1,8 @@
+#!/usr/bin/env python3
 import cv2
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-import rclpy
-from rclpy.node import Node
+import rospy
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
@@ -11,10 +11,10 @@ import filterpy
 import open3d as o3d
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
+import time
 
-class ArucoEstimator(Node):
+class ArucoEstimator:
     def __init__(self, display=True):
-        super().__init__('aruco_node')
         self.cv_bridge = CvBridge()
         
         # read config
@@ -23,10 +23,6 @@ class ArucoEstimator(Node):
         self.display = self.config['display']
         self.mtx = np.array(self.config['camera']['mtx'])
         self.dist = np.array(self.config['camera']['dist'])
-        self.detector = cv2.aruco.ArucoDetector(
-            cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50),
-            cv2.aruco.DetectorParameters()
-        )
 
         # generate aruco dictionary
         self.tags = {}
@@ -44,20 +40,6 @@ class ArucoEstimator(Node):
             corner_points = ((corner_points - center_p) @ tag_R) + center_p
             
             self.tags[int(tag_id)] = corner_points
-            # pcd = o3d.geometry.PointCloud()
-            # colors = np.array([
-            #     [1, 0, 0],   # red
-            #     [0, 1, 0],   # green
-            #     [0, 0, 1],   # blue
-            #     [0, 0, 0]    # black
-            # ])
-            # pcd.colors = o3d.utility.Vector3dVector(colors)
-            # pcd.points = o3d.utility.Vector3dVector(corner_points)
-            # pcds.append(pcd)
-        
-        # axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
-        # pcds.append(axis)
-        # o3d.visualization.draw_geometries(pcds)
         
         # kalman filter
         self.f = KalmanFilter(dim_x=6, dim_z=3)
@@ -76,14 +58,14 @@ class ArucoEstimator(Node):
         ])
         self.f.P *= 5.0
 
-        self.prev_f_time = self.get_clock().now().nanoseconds
+        self.prev_f_time = rospy.Time.now().to_nsec()
 
         # subscribe to video
-        self.create_subscription(Image, '/BlueROV2/video', self.cam_cb, 1)
+        self.image_sub = rospy.Subscriber('/BlueROV2/video', Image, self.cam_cb, queue_size=1)
 
         # publish annotated image and pose
-        self.annotated_pub = self.create_publisher(Image, '/aruco/annotated', 1)
-        self.pose_pub = self.create_publisher(PoseStamped, '/aruco/pose', 1)
+        self.annotated_pub = rospy.Publisher('/aruco/annotated', Image, queue_size=1)
+        self.pose_pub = rospy.Publisher('/aruco/pose', PoseStamped, queue_size=1)
 
     def make_Q(self, dt, sigma_a):
         q = sigma_a**2
@@ -104,7 +86,18 @@ class ArucoEstimator(Node):
     def cam_cb(self, msg):
         # tag identification and display
         frame = self.cv_bridge.imgmsg_to_cv2(msg)
-        corners, ids, rejected = self.detector.detectMarkers(frame)
+        # corners, ids, rejected = self.detector.detectMarkers(frame)
+        if str(cv2.__version__) != '4.2.0':
+            dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
+            detectorParams = cv2.aruco.DetectorParameters()
+            detector = cv2.aruco.ArucoDetector(dictionary, detectorParams)
+            corners, ids, rejected = detector.detectMarkers(frame)
+        else:
+            dictionary = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_250)
+            detectorParams = cv2.aruco.DetectorParameters_create()
+            corners, ids, rejected = cv2.aruco.detectMarkers(
+                frame, dictionary, parameters=detectorParams
+            )
 
         if self.display:
             annotated_frame = frame.copy()
@@ -150,7 +143,7 @@ class ArucoEstimator(Node):
         tvec_ros = T_cv_to_ros @ tvec
 
         # kalman update
-        dt = (self.get_clock().now().nanoseconds - self.prev_f_time) * 1e-9
+        dt = (rospy.Time.now().to_nsec() - self.prev_f_time) * 1e-9
         self.f.F = np.array([
             [1, 0, 0, dt, 0, 0],
             [0, 1, 0, 0, dt, 0],
@@ -163,31 +156,22 @@ class ArucoEstimator(Node):
         self.f.Q = self.make_Q(dt, 0.5)
         self.f.predict()
         self.f.update(tvec_ros)
-        self.prev_f_time = self.get_clock().now().nanoseconds
+        self.prev_f_time = rospy.Time.now().to_nsec()
 
         # publish pose
         pose_msg = PoseStamped()
-        pose_msg.header.stamp = self.get_clock().now().to_msg()
+        pose_msg.header.stamp = rospy.Time.now()
         pose_msg.header.frame_id = 'base_link'  # or use your world frame name
         pose_msg.pose.position.x = float(self.f.x[0])
         pose_msg.pose.position.y = float(self.f.x[1])
         pose_msg.pose.position.z = float(self.f.x[2])
-        # Convert rotation matrix to quaternion
-        # quat = R.from_matrix(rot_ros).as_quat()  # [x, y, z, w]
-        # pose_msg.pose.orientation.x = float(quat[0])
-        # pose_msg.pose.orientation.y = float(quat[1])
-        # pose_msg.pose.orientation.z = float(quat[2])
-        # pose_msg.pose.orientation.w = float(quat[3])
         self.pose_pub.publish(pose_msg)
 
-        
 
-
-def main(args=None):
-    rclpy.init(args=args)
-    node = ArucoEstimator()
-    rclpy.spin(node)
-    rclpy.shutdown()
+def main():
+    rospy.init_node('aruco_node')
+    estimator = ArucoEstimator()
+    rospy.spin()
 
 if __name__ == "__main__":
     main()
