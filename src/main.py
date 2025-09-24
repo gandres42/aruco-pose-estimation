@@ -18,7 +18,7 @@ class ArucoEstimator:
         self.cv_bridge = CvBridge()
         
         # read config
-        with open('config.json', 'r') as f:
+        with open('/home/gavin/Git/planner_ros1_ws/src/aruco/src/config.json', 'r') as f:
             self.config = json.load(f)
         self.display = self.config['display']
         self.mtx = np.array(self.config['camera']['mtx'])
