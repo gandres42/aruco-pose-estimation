@@ -12,19 +12,26 @@ import open3d as o3d
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
 import time
+import math
+
+SONAR_BINS = 512
+SONAR_AZIMUTH = 60
+SONAR_VERTICAL_APERTURE = 12
+SONAR_MAX_DIST = 5
+SCALING_ITERATIONS = 50
 
 class ArucoEstimator:
     def __init__(self, display=True):
         self.cv_bridge = CvBridge()
         
         # read config
-        with open('/home/gavin/Git/planner_ros1_ws/src/aruco/src/config.json', 'r') as f:
+        with open('config.json', 'r') as f:
             self.config = json.load(f)
         self.display = self.config['display']
         self.mtx = np.array(self.config['camera']['mtx'])
         self.dist = np.array(self.config['camera']['dist'])
 
-        # generate aruco dictionary
+        # region aruco setup
         self.tags = {}
         pcds = []
         for tag_id, tag_dict in self.config['tags'].items():
@@ -40,8 +47,9 @@ class ArucoEstimator:
             corner_points = ((corner_points - center_p) @ tag_R) + center_p
             
             self.tags[int(tag_id)] = corner_points
+        # endregion
         
-        # kalman filter
+        # region kalman filter
         self.f = KalmanFilter(dim_x=6, dim_z=3)
         self.f.x = np.array([
             [0],
@@ -59,13 +67,15 @@ class ArucoEstimator:
         self.f.P *= 5.0
 
         self.prev_f_time = rospy.Time.now().to_nsec()
+        # endregion
 
-        # subscribe to video
+        # region ros garbage
+
         self.image_sub = rospy.Subscriber('/BlueROV2/video', Image, self.cam_cb, queue_size=1)
-
-        # publish annotated image and pose
         self.annotated_pub = rospy.Publisher('/aruco/annotated', Image, queue_size=1)
         self.pose_pub = rospy.Publisher('/aruco/pose', PoseStamped, queue_size=1)
+
+        # endregion
 
     def make_Q(self, dt, sigma_a):
         q = sigma_a**2
@@ -161,7 +171,7 @@ class ArucoEstimator:
         # publish pose
         pose_msg = PoseStamped()
         pose_msg.header.stamp = rospy.Time.now()
-        pose_msg.header.frame_id = 'base_link'  # or use your world frame name
+        pose_msg.header.frame_id = 'map'  # or use your world frame name
         pose_msg.pose.position.x = float(self.f.x[0])
         pose_msg.pose.position.y = float(self.f.x[1])
         pose_msg.pose.position.z = float(self.f.x[2])
